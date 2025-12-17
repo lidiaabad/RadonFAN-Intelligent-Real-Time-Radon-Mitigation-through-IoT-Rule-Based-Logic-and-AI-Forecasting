@@ -19,7 +19,7 @@ Modifications to the DC model are studied to identify potential performance bott
 
 ## Models defined
 
-[Comparison of DC and R2C models](DCR2C.pdf)  
+![Comparison of DC and R2C models](architecture.png)  
 
 ---
 

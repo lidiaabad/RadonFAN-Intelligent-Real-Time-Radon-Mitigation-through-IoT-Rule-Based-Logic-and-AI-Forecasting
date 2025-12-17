@@ -20,7 +20,6 @@ Modifications to the DC model are studied to identify potential performance bott
 ## Models defined
 
 [Comparison of DC and R2C models](DCR2C.pdf)  
-*Comparison between the Direct Classification (DC) and Regression-to-Classification (R2C) models in terms of performance and prediction behavior.*
 
 ---
 
@@ -31,4 +30,7 @@ Modifications to the DC model are studied to identify potential performance bott
 git clone https://github.com/lidiaabad/RadonFAN-Intelligent-Real-Time-Radon-Mitigation-through-IoT-Rule-Based-Logic-and-AI-Forecasting.git
 cd RadonFAN-Intelligent-Real-Time-Radon-Mitigation-through-IoT-Rule-Based-Logic-and-AI-Forecasting
 ```
-### 2. ....
+### 2. Install requirements
+
+### 3. ....
+

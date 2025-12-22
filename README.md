@@ -22,7 +22,15 @@ Modifications to the DC model are studied to identify potential performance bott
 ![Comparison of DC and R2C models](architecture.png)  
 
 ---
+## Estructure of this repository
 
+RadonFAN/
+├── data/        # Input datasets
+├── models/      # Saved trained checkpoints and preprocessing scalers for deployment
+├── notebooks/   # Exploratory analysis, figures, and tables
+└── src/         # Source code for preprocessing, training, and evaluation
+
+---
 ## How to use this repository
 
 ### 1. Clone the repository
@@ -31,6 +39,17 @@ git clone https://github.com/lidiaabad/RadonFAN-Intelligent-Real-Time-Radon-Miti
 cd RadonFAN-Intelligent-Real-Time-Radon-Mitigation-through-IoT-Rule-Based-Logic-and-AI-Forecasting
 ```
 ### 2. Install requirements
+```bash
+pip install -r requirements.txt
+```
+### 3. Run the scripts
 
-### 3. ....
+Shrun.sh is a bash file that calls freezetraintest.py of freezetest.py files to train and test or only test the models. 
+
+```bash
+nohup ./src/shrun.sh > ./logname.log
+```
+
+
+
 

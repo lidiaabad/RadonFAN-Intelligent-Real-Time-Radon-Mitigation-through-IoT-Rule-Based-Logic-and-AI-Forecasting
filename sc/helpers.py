@@ -5,7 +5,6 @@ import json
 import time
 import re
 from sklearn.manifold import TSNE
-#from torchinfo import summary
 from sklearn.metrics import roc_auc_score, confusion_matrix, ConfusionMatrixDisplay, accuracy_score, precision_score, recall_score, f1_score
 import torch
 from sklearn import metrics
@@ -50,19 +49,6 @@ def get_forward_time(model, device):
     model.to(device)
     return forward_time
 
-'''
-def get_model_summary(model, device, input_size=(1, 512, 1)):
-    Helper function to show model summary
-
-    model_input = torch.randn(input_size).to(device)
-    info = summary(model, input_data=[model_input], verbose=1)
-    model_summary = {
-        "model": str(model),
-        "total_parameters": info.total_params,
-        "trainable_parameters": info.trainable_params}
-
-    return model_summary
-'''
 
 def get_computational_cost(model, input_shapes): 
     '''
@@ -265,11 +251,9 @@ def plot_y_pred_vs_target(y_reg, y_pred_tensor, y_pred_bin, y_target_tensor, sca
         
         y_bin_RS = np.zeros_like(y_target)
         
-        # Cálculo de diferencias correctamente (derivada aproximada)
-        diff = np.zeros_like(y_inv[:, 0])  # suponiendo y_reg.shape = (N, 6)
-        diff[1:] = (y_inv[1:, 0] - y_inv[:-1, 0]) / 10.0  # derivada sobre el primer canal
+        diff = np.zeros_like(y_inv[:, 0])  
+        diff[1:] = (y_inv[1:, 0] - y_inv[:-1, 0]) / 10.0  
 
-        # Generación de la señal binaria del sistema de reglas
         for i in range(1, len(y_inv)): 
             if (y_inv[i, 0] > threshold or 
                 (y_inv[i, 0] > (2/3) * threshold and diff[i] > slope)): 
@@ -283,7 +267,7 @@ def plot_y_pred_vs_target(y_reg, y_pred_tensor, y_pred_bin, y_target_tensor, sca
         
         error = y_pred - y_target
         
-        # 2 plots: values and residuals agains index
+        # 3 plots: values, zoom for values and residuals agains index
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18,12), sharex=False)
         
         # --- Values against index
@@ -305,7 +289,6 @@ def plot_y_pred_vs_target(y_reg, y_pred_tensor, y_pred_bin, y_target_tensor, sca
         ax2.legend()
         ax2.set_ylim(0.3, 0.7)
         
-
         # Residuals agains index
         ax3.plot(indices, error, label='Residual value', color='tab:red', alpha=0.6)
         ax3.axhline(0, linestyle='--', color='gray')
@@ -579,58 +562,43 @@ def plot_regression_weights(y_reg, y_bin, scaler,  figure_path, threshold=100, m
         - weights
     '''
 
-    # --- Desnormalizamos todos los valores
     y_orig = scaler.inverse_transform(y_reg)
-
-    # --- Tomamos SOLO el último valor de cada fila
     last_vals = y_orig[:, -1]  # shape (N,)
-
-    # --- Parámetros de control
+                                     
     low_limit = low_frac * threshold
     sigma = low_frac * threshold
 
-    # --- Gaussiana centrada en threshold
     weights = np.exp(-0.5 * ((last_vals - (threshold*0.9)) / sigma) ** 2)
-
-    # --- Penalización fuerte para valores muy bajos
+                                     
     low_mask = last_vals < low_limit
     weights[low_mask] *= 0.05
 
-    # --- Refuerzo para valores dentro del rango [0.8, 1.2] * threshold
     near_mask = (last_vals >= 0.5* threshold) & (last_vals <= 1.5 * threshold)
     boost = 1 + (boost_weight - 1) * np.exp(-0.5 * ((last_vals - (threshold*0.9)) / (0.2 * threshold)) ** 2)
     weights[near_mask] *= boost[near_mask]
     
     seq_multiplier = np.ones_like(weights, dtype=float)
 
-    # Convertimos y_bin a 1D si viene por columnas (e.g. (N,1))
     y_bin_flat = y_bin.reshape(-1).astype(int)
 
     count = 0
     for i in range(len(y_bin_flat)):
         if y_bin_flat[i] == 1:
             if i == 0 or y_bin_flat[i - 1] == 0:
-                # Primer 1 después de 0 → forecast
                 count = forecast
             else:
-                # Segundo, tercero... va bajando
                 count = max(count - 1, 1)
             seq_multiplier[i] = count
         else:
-            # Reinicia la secuencia si hay un 0
             count = 0
 
-    # --- Aplicamos el multiplicador ---
     weights *= seq_multiplier
-
 
     # === Plot ===
     plt.figure(figsize=(6, 5))
     plt.scatter(last_vals, weights, alpha=0.5, s=10, color='teal')
-    #plt.axvline(threshold, color='black', lisnestyle='-.', label='T')
     plt.xlabel('y$_{t+6}$ (Bq/m$^3$)')
     plt.ylabel('Sample Weight')
-    #plt.legend()
     plt.tight_layout()
     plt.savefig(figure_path)
     plt.close()
@@ -692,6 +660,19 @@ def plot_y_pred_vs_target_hist(y_pred_cl, y_true_bin, y_true, figure_path=None):
     plt.close()
 
 def feature_ablation_importance(model, test_loader, device, feature_names, figure_path):
+    '''
+    Function to plot feature importance based on ablation 
+    Input: 
+        - model
+        - test loader
+        - device
+        - feature names for the plot
+        - path to be stored
+    Ouput: 
+        - figure
+        - dataframe of difference in number of FP, FN and logit values for each set with respect to baseline model
+    '''
+    #get X and ybin and compute medians
     model.eval()
     X_list, y_list = [], []
     with torch.no_grad():
@@ -702,6 +683,7 @@ def feature_ablation_importance(model, test_loader, device, feature_names, figur
     y = np.concatenate(y_list).ravel()
     medians = np.nanmedian(X.reshape(-1, X.shape[-1]), axis=0)
 
+    #helper to predict from array
     def predict_from_array(arr):
         preds = []
         with torch.no_grad():
@@ -712,19 +694,18 @@ def feature_ablation_importance(model, test_loader, device, feature_names, figur
                 preds.append(logits.cpu().numpy().ravel())
         return np.concatenate(preds)
 
+    #perform for baseline model
     baseline_logits = predict_from_array(X)
-    #ybin_base = smooth_binary_predictions(baseline_logits, thrup, thrlow, trend, slope, mode="hysteresis")
     ybin_base = (baseline_logits > 0.5).astype(int)
     tn, fp_base, fn_base, tp = confusion_matrix(y, ybin_base).ravel()
     print(f"[BASELINE] FP={fp_base}, FN={fn_base}")
 
+    #the same for each combination with one feature ablated at a time
     records = []
     for fi, fname in enumerate(feature_names):
         X_mod = X.copy()
         X_mod[..., fi] = medians[fi]
         preds_mod = predict_from_array(X_mod)
-
-        #ybin_mod = smooth_binary_predictions(preds_mod, thrup, thrlow, trend, slope, mode="hysteresis")
         ybin_mod = (preds_mod > 0.5).astype(int)
         tn, fp, fn, tp = confusion_matrix(y, ybin_mod).ravel()
         delta_logit = np.mean(np.abs(preds_mod - baseline_logits))
@@ -738,7 +719,7 @@ def feature_ablation_importance(model, test_loader, device, feature_names, figur
 
     df = pd.DataFrame(records).sort_values("delta_fn", ascending=False)
 
-    # ---- Plots ----
+    # ---- Plots: increment of FP, increment of FN, differences in logits ----
     metrics = ["delta_fp", "delta_fn", "delta_logit"]
     titles = ["ΔFP (feature ablation)", "ΔFN (feature ablation)", "ΔLogit (feature ablation)"]
 
@@ -756,6 +737,9 @@ def feature_ablation_importance(model, test_loader, device, feature_names, figur
     return df
 
 def feature_addition_importance(model, test_loader, device, feature_names, figure_path, neutral="median"):
+    '''
+    Same as feature_ablation_importance but here all except corresponding feature is not present
+    '''
 
     model.eval()
     X_list, y_list = [], []
@@ -1132,7 +1116,6 @@ def extract_arc_from_report(report_file: str) -> str | None:
     return None
 
 def ensemble_with_rules(reg_preds, scaler, threshold_high=300, threshold_low=200, slope_thresh=0.3, difference=False, x_last=None):
-    
     '''
     Helper fucntion to eperform ensemble of classification head and predefined rules
     Input: 
@@ -1164,27 +1147,7 @@ def ensemble_with_rules(reg_preds, scaler, threshold_high=300, threshold_low=200
     y_inv=y_inv.reshape(N, steps)
     
     labels = np.zeros(N, dtype=np.int64)
-    '''
-    for i in range(N):
-        preds = y_inv[i]
-        last_val = preds[-1]
-        slope = preds[-1] - preds[-2]
-
-        if last_val > threshold_high:
-            labels[i] = 1
-        elif last_val < threshold_low:
-            labels[i] = 0
-        elif slope > slope_thresh:
-            labels[i] = 1
-        elif slope < -slope_thresh:
-            labels[i] = 0
-        else:
-            # copiar etiqueta de instancia anterior
-            if i > 0:
-                labels[i] = labels[i-1]
-            else:
-                labels[i] = 0  # o 1 si quieres iniciar con 1
-    '''
+   
     for i in range(N):
         preds = y_inv[i]
         last_val = preds[-1]
@@ -1195,237 +1158,97 @@ def ensemble_with_rules(reg_preds, scaler, threshold_high=300, threshold_low=200
             
     return labels
 
-def smooth_binary_predictions(
-        y_pred_cl,
-        threshold_up=0.6,
-        threshold_low=0.3,
-        trend_len=2,
-        upslope_rel=0.5,
-        mode='bidirectional_slope'
-    ):
-
+def smooth_binary_predictions(y_pred_cl,threshold_up=0.6,threshold_low=0.3,mode='hystersis'):
+    '''
+    Function to define y binary values based on fixed threhsold or hysteresis
+    Input: 
+        - pred values
+        - up and low thresholds
+        - mode
+    Output: 
+        - binary values
+    '''
     y_pred_cl = np.asarray(y_pred_cl)
     n = len(y_pred_cl)
     y_bin = np.zeros(n, dtype=int)
 
-    # --- inicialización correcta: clase más cercana ---
     y_bin[0] = 1 if y_pred_cl[0] >= 0.5 else 0
-
-    # ================================================================
-    #   MODE 2 — BIDIRECTIONAL_SLOPE
-    # ================================================================
-    if mode == 'bidirectional_slope':
-
+    
+    if mode == 'hysteresis':
         for i in range(1, n):
             val = y_pred_cl[i]
-
-            # Hard thresholds
             if val >= threshold_up:
                 y_bin[i] = 1
-                continue
-
-            if val <= threshold_low:
-                y_bin[i] = 0
-                continue
-
-            y_bin[i] = y_bin[i-1]
-
-            if i >= trend_len:
-                # segment of last trend_len+1 points
-                segment = y_pred_cl[i-trend_len:i+1]
-                deltas = np.diff(segment)
-
-                # all positive slopes → strong upward trend
-                if np.all(deltas > 0):
-                    y_bin[i] = 1
-                # all negative slopes → strong downward trend
-                elif np.all(deltas < 0):
-                    y_bin[i] = 0
-
-
-    # ================================================================
-    #   MODE 3 — UP_SLOPE (solo activa 1, nunca apaga)
-    # ================================================================
-    elif mode == 'up_slope':
-
-        for i in range(1, n):
-            val = y_pred_cl[i]
-
-            # Si ≥ threshold_up ⇒ instantáneo a 1
-            if val >= threshold_up:
-                y_bin[i] = 1
-                continue
-
-            # keep previous state
-            y_bin[i] = y_bin[i-1]
-
-            if i >= trend_len:
-                segment = y_pred_cl[i-trend_len:i+1]
-                
-                eps = 1e-6
-                rel_deltas = []
-                for k in range(1, len(segment)):
-                    prev = max(segment[k-1], eps)
-                    rel_deltas.append((segment[k] - segment[k-1]) / prev)
-
-                rel_deltas = np.array(rel_deltas) 
-
-                # Subida fuerte: todos los deltas relativos > upslope_rel
-                strong_up = np.all(rel_deltas > 0) and (y_pred_cl[i] - y_pred_cl[i-trend_len] > upslope_rel)
-
-                # Bajada fuerte: todos los deltas relativos < -upslope_rel
-                strong_down = np.all(rel_deltas < 0) and (y_pred_cl[i] - y_pred_cl[i-trend_len] < - upslope_rel)
-                if strong_up:
-                    y_bin[i] = 1
-                elif strong_down:
-                    y_bin[i] = 0
-
-    elif mode == 'hysteresis':
-
-        for i in range(1, n):
-
-            val = y_pred_cl[i]
-            
-            # --- caso 1: por encima de threshold_up ---
-            if val >= threshold_up:
-                y_bin[i] = 1
-                continue
-            
-            # --- caso 2: por debajo de threshold_low ---
             elif val <= threshold_low:
                 y_bin[i] = 0
-                continue
-            
-            if i >= trend_len:
-                segment = y_pred_cl[i-trend_len+1:i+1]
-                delta=np.diff(segment)
-                # all positive slopes → strong upward trend
-                if np.all(segment> threshold_low): #:and np.all(delta>0):
-                    y_bin[i] = 1
-                # all negative slopes → strong downward trend
-                elif np.all(segment < threshold_up): # and np.all(delta<0):
-                    y_bin[i] = 0
-
             else:
-                y_bin[i] = y_bin[i-1]   # NO CAMBIA
-            
-
-        
-    elif mode == 'history':
-        for i in range(1, n):
-            val = y_pred_cl[i]
-
-            # Si ≥ threshold_up ⇒ instantáneo a 1
-            if val >= threshold_up:
-                y_bin[i] = 1
-                continue
-
-            # keep previous state
-            y_bin[i] = y_bin[i-1]
-            
-            if i >= trend_len:
-                segment = y_pred_cl[i-trend_len:i+1]
-                
-                eps = 1e-6
-                rel_deltas = []
-                for k in range(1, len(segment)):
-                    prev = max(segment[k-1], eps)
-                    rel_deltas.append((segment[k] - segment[k-1]) / prev)
-
-                rel_deltas = np.array(rel_deltas) 
-
-                # Subida fuerte: todos los deltas relativos > upslope_rel
-                strong_up = np.all(rel_deltas > 0) # and (y_pred_cl[i] - y_pred_cl[i-trend_len] > upslope_rel)
-
-                # Bajada fuerte: todos los deltas relativos < -upslope_rel
-                strong_down = np.all(rel_deltas < 0) and (y_pred_cl[i] - y_pred_cl[i-trend_len] < - upslope_rel)
-                if strong_up:
-                    y_bin[i] = 1
-                elif strong_down:
-                    y_bin[i] = 0
+                y_bin[i] = y_bin[i-1]  
                     
     elif mode == 'fixed':
         for i in range(1, n):
             val = y_pred_cl[i]
-
-            # Si ≥ threshold_up ⇒ instantáneo a 1
             if val >= threshold_up:
                 y_bin[i] = 1
             else: 
                 y_bin[i] = 0
-
     else:
         raise ValueError(f"Unknown mode: {mode}")
 
     return y_bin
 
 def grid_search_smoothing(y_true, y_pred_cl):
+    '''
+    Function for grid search of binary definition
+    Input: 
+        - target and predicted values
+    Output
+        - df with best mode and parameters
+    '''
 
-    #modes = ["bidirectional_slope", "up_slope", "hysteresis", "history"]
-    modes = ["hysteresis"]
-    thr_up_vals  = [0.7]
-    thr_low_vals = [0.3]
-    trend_vals   = [3]
-    slope_vals   = [0.05]
+    modes = ["hysteresis", "fixed"]
+    thr_up_vals  = [0.5, 0.6, 0.7]
+    thr_low_vals = [0.3, 0.4]
     all_results = []
     best_global = {"mode": None, "params": None, "score": np.inf, "y_bin": None}
 
     for mode in modes:
         for th_up in thr_up_vals:
             for th_low in thr_low_vals:
-                for tl in trend_vals:
-                    for slope in slope_vals:
+                y_bin = smooth_binary_predictions(y_pred_cl,threshold_up=th_up,threshold_low=th_low,mode=mode)
+                tn, fp, fn, tp = confusion_matrix(y_true, y_bin).ravel()
+                score = fp + 10 * fn
+                all_results.append([mode, th_up, th_low, tl, slope, fp, fn, score])
+                print(f"mode {mode}, th_up {th_up}, th_low {th_low}, fp {fp}, fn {fn}")
+                if score < best_global["score"]:
+                    best_global = {"mode": mode,"params": (th_up, th_low),"score": score,"y_bin": y_bin}
 
-                        y_bin = smooth_binary_predictions(
-                            y_pred_cl,
-                            threshold_up=th_up,
-                            threshold_low=th_low,
-                            trend_len=tl,
-                            upslope_rel=slope,
-                            mode=mode
-                        )
+    results_df = pd.DataFrame(all_results,columns=["mode","thr_up","thr_low","trend_len","slope","FP","FN","score"])
 
-                        tn, fp, fn, tp = confusion_matrix(y_true, y_bin).ravel()
-                        score = fp + 10 * fn
-
-                        all_results.append([mode, th_up, th_low, tl, slope, fp, fn, score])
-                        print(f"mode {mode}, th_up {th_up}, th_low {th_low}, tl, {tl}, slope {slope}, fp {fp}, fn {fn}")
-                        if score < best_global["score"]:
-                            #print(f"mode {mode}, th_up {th_up}, th_low {th_low}, tl, {tl}, slope {slope}, fp {fp}, fn {fn}")
-                                                
-                            best_global = {
-                                "mode": mode,
-                                "params": (th_up, th_low, tl, slope),
-                                "score": score,
-                                "y_bin": y_bin
-                            }
-
-    results_df = pd.DataFrame(
-        all_results,
-        columns=["mode","thr_up","thr_low","trend_len","slope","FP","FN","score"]
-    )
-
-    return (
-        best_global["mode"],
-        *best_global["params"]
-        #best_global["y_bin"],
-        #results_df
-    )
+    return ( best_global["mode"],*best_global["params"])
     
     
-def comparison_to_rule(filepath, model, device, scaler, threshold, lookback=12, forecast=6, slope=0.3, thr_up=0.7, thr_down=0.3, trend=2, slope_rel=1, mode="default", figure_path=None):
-    print("PERFORMING COMPARISON RULE AND AI SYSTEMS")
-    
+def comparison_to_rule(filepath, model, device, scaler, threshold, lookback=12, forecast=6, slope=0.3, thr_up=0.7, thr_down=0.3, mode="hysteresis", figure_path=None):
+    '''
+    Function to compare the rule system with an AI model
+    Input: 
+        - data filepath
+        - model
+        - device
+        - scaler
+        - threhsold
+        - lb and fc parameters
+        - rule system slope parameters
+        - threshold and mode of binary label definiiton
+        - figure path
+    Output: 
+        - figure
+        - AI and RS cost and unsafety value
+    '''
     
     (X_train, y_train, y_train_bin, w_cl_train, w_reg_train), (X_val, y_val, y_val_bin, w_cl_val, w_reg_val), (X_test, y_test, y_test_bin, w_cl_test, w_reg_test), scaler, scaler_y, train_std = preprocess_data(filepath, lookback, forecast, threshold)
-
-
     train_loader, val_loader, test_loader = create_dataloaders(X_train, y_train, y_train_bin, w_cl_train, w_reg_train, X_val, y_val, y_val_bin, w_cl_val, w_reg_val, X_test, y_test, y_test_bin, w_cl_test, w_reg_test,
                                                                scaler=scaler, train_std=train_std, batch_size=1, dataaug=False, shuffle=False)
 
-
-
-    # ---- Función auxiliar para obtener predicciones y valores reales de un loader ----
     def get_preds_and_labels(loader):
         y_list, yreg_list, preds_list = [], [], []
         model.eval()
@@ -1444,27 +1267,18 @@ def comparison_to_rule(filepath, model, device, scaler, threshold, lookback=12, 
         y_bin_real = np.concatenate(y_list).ravel()
         y_reg_all=np.concatenate(yreg_list)
         preds_all = np.concatenate(preds_list)
-        y_bin_pred = smooth_binary_predictions(preds_all, thr_up, thr_down, trend, slope_rel, mode)
-
+        y_bin_pred = smooth_binary_predictions(preds_all, thr_up, thr_down, mode)
         return preds_all, y_reg_all, y_bin_pred, y_bin_real
 
-    # ---- Obtener predicciones y etiquetas de train, val y test ----
     y_cl_train, yreg_train, y_bin_train, y_bin_train_real = get_preds_and_labels(train_loader)
-    print("num elements train", len(yreg_train))
     y_cl_val, yreg_val, y_bin_val , y_bin_val_real = get_preds_and_labels(val_loader)
-    print("num elements val", len(yreg_val))
     y_cl_test, yreg_test, y_bin_test, y_bin_test_real  = get_preds_and_labels(test_loader)
-    print("num elements test", len(yreg_test))
 
-    # ---- Concatenar los tres conjuntos ----
     y_cl_all = np.concatenate([y_cl_train, y_cl_val, y_cl_test], axis=0)
     y_reg_all = np.concatenate([yreg_train, yreg_val, yreg_test], axis=0)
     y_bin_all = np.concatenate([y_bin_train, y_bin_val, y_bin_test], axis=0)
     y_real_bin_all = np.concatenate([y_bin_train_real ,y_bin_val_real , y_bin_test_real ], axis=0)
-    
-    print(len(y_reg_all), len(y_bin_all), len(y_real_bin_all))
 
-    # ---- A partir de aquí, usamos el mismo código que tu función original ----
     N, steps = y_reg_all.shape
     y_reshape = y_reg_all.reshape(-1, 1)
     y_inv = scaler_y.inverse_transform(y_reshape).reshape(N, steps)
@@ -1472,12 +1286,10 @@ def comparison_to_rule(filepath, model, device, scaler, threshold, lookback=12, 
     y_bin_AI = y_bin_all.copy()
     y_bin_AI_real = y_real_bin_all.copy()
     y_bin_RS = np.zeros_like(y_bin_AI)
-
-    # Cálculo de derivada aproximada
+    
     diff = np.zeros_like(y_inv[:, 0])
     diff[1:] = (y_inv[1:, 0] - y_inv[:-1, 0]) / 10.0
 
-    # Sistema de reglas
     for i in range(1, len(y_inv)):
         if (y_inv[i, 0] > threshold or 
             (y_inv[i, 0] > (2/3) * threshold and diff[i] > slope)):
@@ -1488,67 +1300,17 @@ def comparison_to_rule(filepath, model, device, scaler, threshold, lookback=12, 
     above_thr = np.sum(y_inv[:, 0] > threshold)
     transitions = np.sum((y_inv[1:, 0] == 1) & (y_inv[:-1, 0] == 0))
     sp = above_thr + 2 * transitions
-
-    # Costes
     cost_RS = np.sum(y_bin_RS) / len(y_bin_RS)
     cost_AI = np.sum(y_bin_AI) / len(y_bin_AI)
-    cost_real_IA = np.sum(y_bin_AI_real) / len(y_bin_AI_real)
     cost_min = sp / len(y_bin_AI)
-
-
-    unsafe_RS = np.where(
-        (y_bin_RS == 0)
-        & (np.any(y_inv[:, 0:3] > threshold, axis=1))
-    )[0]
-
-    unsafe_AI = np.where(
-        (y_bin_AI == 0)
-        & (np.any(y_inv[:, 0:3] > threshold, axis=1))
-    )[0]
-
-    unsafe_AI_real = np.where(
-        (y_bin_AI_real == 0)
-        & (np.any(y_inv[:, 0:3] > threshold, axis=1))
-    )[0]
-    
-
-    safety_RS = 1 - len(unsafe_RS) / len(y_reg_all)
-    safety_AI = 1 - len(unsafe_AI) / len(y_reg_all)
-    safety_AI_real = 1 - len(unsafe_AI_real) / len(y_reg_all)
-
-    # Transiciones
-    trans_RS = np.where((y_bin_RS[1:] == 1) & (y_bin_RS[:-1] == 0))[0] + 1
-    trans_AI = np.where((y_bin_AI[1:] == 1) & (y_bin_AI[:-1] == 0))[0] + 1
-    trans_AI_real = np.where((y_bin_AI_real[1:] == 1) & (y_bin_AI_real[:-1] == 0))[0] + 1
-
-    val_RS = y_inv[trans_RS - 1, 0] if len(trans_RS) > 0 else []
-    val_AI = y_inv[trans_AI - 1, 0] if len(trans_AI) > 0 else []
-    val_AI_real = y_inv[trans_AI_real - 1, 0] if len(trans_AI_real) > 0 else []
+    unsafe_RS = np.where((y_bin_RS == 0)& (np.any(y_inv[:, 0:3] > threshold, axis=1)))[0]
+    unsafe_AI = np.where((y_bin_AI == 0)& (np.any(y_inv[:, 0:3] > threshold, axis=1)))[0]
 
     # Prints
-    print(f"Coste RS: {cost_RS:.4f}, Coste AI: {cost_AI:.4f}, Coste AI real : {cost_real_IA:.4f}, Coste min: {cost_min:.4f}")
-    print(f"Seguridad RS: {safety_RS:.4f}, Seguridad AI: {safety_AI:.4f}, Seguridad AI real: {safety_AI_real:.4f}; Seguridad max: 1.00")
-    print(f"Violaciones RS: {len(unsafe_RS)}, Violaciones AI: {len(unsafe_AI)}, Violaciones AI real: {len(unsafe_AI_real)}")
-    print(f"Transiciones RS: {trans_RS.tolist()}")
-    print(f"Transiciones AI: {trans_AI.tolist()}")
-    print(f"Transiciones AI real: {trans_AI_real.tolist()}")
-    #print(f"Valores activadores RS: {val_RS}")
-    #print(f"Valores activadores AI: {val_AI}")
-    #print(f"Valores activadores AI real: {val_AI_real}")
-    print(f"Indices UNSAFE_RS ({len(unsafe_RS)} casos): {unsafe_RS.tolist()}")
-    print(f"Indices UNSAFE_AI ({len(unsafe_AI)} casos): {unsafe_AI.tolist()}")
-    print(f"Indices UNSAFE_AI_REAL ({len(unsafe_AI_real)} casos): {unsafe_AI_real.tolist()}")
-    
-    print("Valores y_cl_all en UNSAFE_AI:", y_cl_all[unsafe_AI].tolist())
+    print(f"Coste RS: {cost_RS:.4f}, Coste AI: {cost_AI:.4f}, Coste min: {cost_min:.4f}")
+    print(f"Violaciones RS: {len(unsafe_RS)}, Violaciones AI: {len(unsafe_AI)}, Violaciones min: 0")
 
-    # Figura
     plt.figure(figsize=(6, 6))
-    '''
-    plt.scatter(cost_RS, safety_RS, color='orange', label='Rule System')
-    plt.scatter(cost_AI, safety_AI, color='lightblue', label='AI Model')
-    plt.scatter(cost_real_IA, safety_AI_real, color='blue', label='True AI Model')
-    plt.scatter(cost_min, 1, color='green', label='Best Model')
-    '''
     plt.scatter(cost_RS, len(unsafe_RS), color='orange', label='Rule System')
     plt.scatter(cost_AI, len(unsafe_AI), color='lightblue', label='AI Model')
     plt.scatter(cost_real_IA, len(unsafe_AI_real), color='royalblue', label='True AI Model')
@@ -1559,10 +1321,5 @@ def comparison_to_rule(filepath, model, device, scaler, threshold, lookback=12, 
     plt.savefig(figure_path)
     plt.close()
     
+    return { "cost_AI": cost_AI,"cost_RS": cost_RS,"unsafe_AI": unsafe_AI,"unsafe_RS": unsafe_RS}
 
-    return {
-        "cost_AI": cost_AI,
-        "cost_RS": cost_RS,
-        "safety_AI": safety_AI,
-        "safety_RS": safety_RS
-    }

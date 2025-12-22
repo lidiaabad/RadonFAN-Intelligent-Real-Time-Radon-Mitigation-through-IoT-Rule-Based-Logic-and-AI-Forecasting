@@ -5,14 +5,9 @@ def parse_arguments():
 
     parser = argparse.ArgumentParser(description='ARGUS models')
     
-    # Data location
     parser.add_argument('--file_path', type=str, help='path to the folder containinig the Radon data', required=True)
-
-    # Architecture
     parser.add_argument('--arc', default='gruse', help='network architecture: crn and gruse')
     parser.add_argument('--model_id', default='', help='Identifier of model parameter changes')
-    
-    # Training hyperparameters
     parser.add_argument('--seed', type=int, default=0, metavar='S', help='random seed')
     parser.add_argument('--no_cuda', dest='cuda', action='store_false', help='do not use cuda')
     parser.add_argument('--batch_size', type=int, default=30, metavar='N', help='Batch size to use')
@@ -35,6 +30,6 @@ def parse_arguments():
     parser.add_argument('--loss_weight', type=float, default=2, help='Extremes weight in custom loss')
     parser.add_argument('--alpha', type=float, default=1.0, help='Hyperparameter of dense weight computation')
     parser.add_argument('--beta', type=float, default=0.5, help='Beta: weight of regression loss and; 1-Beta: weight of classification loss')
-    # Store results
     parser.add_argument('--checkpoint', default='models/checkpoints', metavar='CHECKPOINT', help='checkpoints directory')
+
     return parser.parse_args()

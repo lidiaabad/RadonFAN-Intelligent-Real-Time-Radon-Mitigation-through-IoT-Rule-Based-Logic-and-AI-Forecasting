@@ -23,13 +23,13 @@ Modifications to the DC model are studied to identify potential performance bott
 
 ---
 ## Estructure of this repository
-
+```
 RadonFAN/
 ├── data/        # Input datasets
 ├── models/      # Saved trained checkpoints and preprocessing scalers for deployment
 ├── notebooks/   # Exploratory analysis, figures, and tables
-└── src/         # Source code for preprocessing, training, and evaluation
-
+└── sc/         # Source code for preprocessing, training, and evaluation
+```
 ---
 ## How to use this repository
 
@@ -47,7 +47,7 @@ pip install -r requirements.txt
 Shrun.sh is a bash file that calls freezetraintest.py of freezetest.py files to train and test or only test the models. 
 
 ```bash
-nohup ./src/shrun.sh > ./logname.log
+nohup ./sc/shrun.sh > ./logname.log
 ```
 
 

@@ -1,24 +1,15 @@
 #!/bin/bash
 
-# Base configuration
-seed=10
+# Base configuration parameters
 epochs=500
-epochsinfo=20
 batch_size=256
 patience=50
 lr=0.0001
 weight_decay=0.01
-hidden_units=64
-num_layers=2
-num_feats=4
-dropout=0.2
 
-arc="LSTMWithResidualMultiheadAttention"
 file_path=('data/RG1.csv' 'data/RG2.csv')
 
-
-
-#USED DURING TRAINING
+# TRAINING
 combinations=(
 "R2C _base 2 16 0.3 6 12 1 0"
 "R2Cms _base 2 16 0.3 6 12 1 0"
@@ -40,7 +31,6 @@ do
             --ar $ar \
             --batch_size $batch_size \
             --epochs $epochs \
-            --epochsinfo $epochsinfo \
             --patience $patience \
             --lr $lr \
             --num_feats $numfeats \

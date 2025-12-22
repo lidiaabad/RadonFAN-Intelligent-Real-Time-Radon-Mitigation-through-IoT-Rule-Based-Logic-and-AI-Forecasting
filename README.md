@@ -50,6 +50,12 @@ Shrun.sh is a bash file that calls freezetraintest.py of freezetest.py files to 
 nohup ./sc/shrun.sh > ./logname.log
 ```
 
-
+The main files (freezetraintest.py and freezetest.py) use other files of the sc folder including: 
+- the arguments file to parse arguments, 
+- the datapreprocesing file to preprocess data, augment them, and create dataloaders on the fly, 
+- the archs file with the architecture modules,
+- losscustom with several losses implemented, 
+- helpers to include functionalities into the script,
+- reporter to define the reported that produces the .json file with the training and testing information of each model. 
 
 

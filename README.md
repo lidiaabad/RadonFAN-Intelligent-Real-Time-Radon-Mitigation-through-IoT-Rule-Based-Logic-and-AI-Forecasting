@@ -27,7 +27,6 @@ Modifications to the DC model are studied to identify potential performance bott
 RadonFAN/
 ├── data/        # Input datasets
 ├── models/      # Saved trained checkpoints and preprocessing scalers for deployment
-├── notebooks/   # Exploratory analysis, figures, and tables
 └── sc/         # Source code for preprocessing, training, and evaluation
 ```
 ---
